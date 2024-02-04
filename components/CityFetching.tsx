@@ -1,14 +1,14 @@
 "use client";
 
-import { Country, City } from "country-state-city";
-import { useState } from "react";
+import { Country, City, ICity } from "country-state-city";
+import { useEffect, useState } from "react";
 import Select from "react-select";
 import { useRouter } from "next/navigation";
 import { GlobeIcon } from "@heroicons/react/solid";
 import { ClipLoader } from "react-spinners";
 import { BsSearch } from "react-icons/bs";
 import { Subtitle } from "@tremor/react";
-
+import { Spinner, useToast } from "@chakra-ui/react";
 type option = {
   value: {
     lattitude: string;
@@ -21,8 +21,8 @@ type option = {
 type cityOption = {
   value: {
     name: string;
-    latitude: string;
-    longitude: string;
+    latitude: string | null | undefined;
+    longitude: string | null | undefined;
     countryCode: string;
     stateCode: string;
   };
@@ -40,29 +40,60 @@ const options = Country.getAllCountries().map((country) => ({
 
 function CityFetching() {
   const [selectedCountry, setSelectedCountry] = useState<option>(null);
-  const [selectedCity, setSelectedCity] = useState<cityOption>(null);
-  //to redirect
+  const [citiesOptions, setCitiesOptions] = useState<cityOption[]>([]);
   const router = useRouter();
-  const [loading, setLoading] = useState(false);
+  const [isLoading, setIsLoading] = useState(false);
 
-  //for handling what the user has selected
+  const [selectedCity, setSelectedCity] = useState<cityOption | null>(null);
+  const toast = useToast();
+
+  useEffect(() => {
+    if (selectedCountry?.value?.isoCode) {
+      const cities = City.getCitiesOfCountry(selectedCountry.value.isoCode) as
+        | ICity[]
+        | undefined;
+      if (cities !== undefined && cities.length > 0) {
+        const options = cities.map((city) => ({
+          value: {
+            name: city.name,
+            latitude: city.latitude || "", // Provide a default value if null/undefined
+            longitude: city.longitude || "", // Provide a default value if null/undefined
+            countryCode: city.countryCode,
+            stateCode: city.stateCode,
+          },
+          label: city.name,
+        }));
+        setCitiesOptions(options);
+      } else {
+        setCitiesOptions([]);
+      }
+    }
+  }, [selectedCountry]);
+
   const handleSelectedCountry = (option: option) => {
     setSelectedCountry(option);
     setSelectedCity(null);
   };
+
   const handleSelectedCity = (option: cityOption) => {
     setSelectedCity(option);
-    router.push(
-      `/location/${option?.value.name} /${option?.value.latitude}/${option?.value.longitude}`
-    );
   };
-  const [isLoading, setIsLoading] = useState(false);
 
   const handleClick = () => {
-    setIsLoading(true);
-    // perform the operation here
-    // once the operation is complete, set setLoading(false)
+    if (selectedCity) {
+      router.push(
+        `/location/${selectedCity.value.name}/${selectedCity.value.latitude}/${selectedCity.value.longitude}`
+      );
+    } else {
+      toast({
+        title: "Select a city first",
+        status: "warning",
+        duration: 3000,
+        isClosable: true,
+      });
+    }
   };
+
   return (
     <div className="space-y-4">
       <div className="space-y-2">
@@ -105,79 +136,89 @@ function CityFetching() {
           }}
         />
       </div>
-      {selectedCountry && (
-        <div className="space-y-2">
-          <div className="flex items-center space-x-2 text-white">
-            <GlobeIcon className="h-5 w-5 text-white" />
-            <div className="flex flex-row">
-              <label htmlFor="country">City</label>
-              <Subtitle className="text-gray-300 text-xs ml-3">
-                (If you can&apos;t find your city, try searching for a district)
-              </Subtitle>
+      {selectedCountry?.value?.isoCode && (
+        <>
+          {citiesOptions.length > 0 ? (
+            <div className="space-y-2">
+              <div className="space-y-2">
+                <div className="flex items-center space-x-2 text-white">
+                  <GlobeIcon className="h-5 w-5 text-white" />
+                  <div className="flex flex-row justify-center items-center">
+                    <label htmlFor="country">City</label>
+                    <h1 className="text-gray-300 text-xs ml-3">
+                      (If you can&apos;t find your city, try searching for a
+                      district)
+                    </h1>
+                  </div>
+                </div>
+
+                <Select
+                  className="text-black bg-transparent"
+                  value={selectedCity}
+                  styles={{
+                    control: (provided) => ({
+                      ...provided,
+                      backgroundColor: "transparent",
+                      borderRadius: "15px",
+                    }),
+                    input: (provided) => ({
+                      ...provided,
+                      color: "white",
+                    }),
+
+                    dropdownIndicator: (provided) => ({
+                      ...provided,
+                      color: "white",
+                    }),
+                    placeholder: (provided) => ({
+                      ...provided,
+                      color: "lightgray",
+                    }),
+                    indicatorSeparator: (provided) => ({
+                      ...provided,
+                      backgroundColor: "white",
+                    }),
+                    singleValue: (provided) => ({
+                      ...provided,
+                      color: "white",
+                    }),
+                  }}
+                  onChange={handleSelectedCity}
+                  options={City.getCitiesOfCountry(
+                    selectedCountry.value.isoCode
+                  )?.map((state) => ({
+                    value: {
+                      latitude: state.latitude!,
+                      longitude: state.longitude!,
+                      countryCode: state.countryCode,
+                      name: state.name,
+                      stateCode: state.stateCode,
+                    },
+                    label: state.name,
+                  }))}
+                />
+                <div className="flex justify-center pt-3">
+                  <button
+                    className="text-gray-100"
+                    onClick={handleClick}
+                    disabled={!selectedCity}
+                  >
+                    {isLoading ? (
+                      <Spinner className="w-[14px] h-[14px]" />
+                    ) : (
+                      <BsSearch size={15} />
+                    )}
+                  </button>
+                </div>
+              </div>{" "}
             </div>
-          </div>
-
-          <Select
-            className="text-black bg-transparent"
-            value={selectedCity}
-            styles={{
-              control: (provided) => ({
-                ...provided,
-                backgroundColor: "transparent",
-                borderRadius: "15px",
-              }),
-              input: (provided) => ({
-                ...provided,
-                color: "white",
-              }),
-
-              dropdownIndicator: (provided) => ({
-                ...provided,
-                color: "white",
-              }),
-              placeholder: (provided) => ({
-                ...provided,
-                color: "lightgray",
-              }),
-              indicatorSeparator: (provided) => ({
-                ...provided,
-                backgroundColor: "white",
-              }),
-              singleValue: (provided) => ({
-                ...provided,
-                color: "white",
-              }),
-            }}
-            onChange={handleSelectedCity}
-            options={City.getCitiesOfCountry(
-              selectedCountry.value.isoCode
-            )?.map((state) => ({
-              value: {
-                latitude: state.latitude!,
-                longitude: state.longitude!,
-                countryCode: state.countryCode,
-                name: state.name,
-                stateCode: state.stateCode,
-              },
-              label: state.name,
-            }))}
-          />
-          <div className="flex justify-center pt-3">
-            <button
-              className="text-gray-100"
-              onClick={handleClick}
-              disabled={!selectedCity}
-            >
-              {isLoading ? (
-                <Subtitle className="text-gray-300 text-xs">
-                  Redirecting...
-                </Subtitle>
-              ) : (
-                <BsSearch size={15} />
-              )}
-            </button>
-          </div>
-        </div>
+          ) : (
+            // Display message when no cities are available for the selected country
+            <div className="text-white">
+              <p>Sorry, This country is not available yet.</p>
+            </div>
+          )}
+        </>
       )}
     </div>
   );
